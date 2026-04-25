@@ -1,0 +1,42 @@
+DOCKER_IMAGE  := go60-zmk-config-docker
+DOCKER_VOLUME := go60-zmk-nix-store
+
+.PHONY: help build build-fast build-rebuild flash flash-slow draw clean nuke
+
+help:
+	@echo "Targets:"
+	@echo "  build          Build firmware via Docker (./build.sh)."
+	@echo "  build-fast     Build, skipping the in-container 'git fetch origin'."
+	@echo "  build-rebuild  Force a fresh 'docker build' before building."
+	@echo "  flash          Build (skipping fetch), then copy go60.uf2 onto the bootloader drive."
+	@echo "  flash-slow     Same as flash but does the in-container 'git fetch origin' first."
+	@echo "  draw           Render keymap-drawer/keymap.svg from config/go60.keymap."
+	@echo "  clean          Remove generated outputs (keymap-drawer/, combined symlink)."
+	@echo "  nuke           Drop the Docker image and Nix-store volume (full reset)."
+	@echo ""
+	@echo "Variables: BRANCH=<ref> picks a ZMK ref. Example: make build BRANCH=v0.2-rc1"
+
+build:
+	./build.sh $(BRANCH)
+
+build-fast:
+	SKIP_FETCH=1 ./build.sh $(BRANCH)
+
+build-rebuild:
+	REBUILD=1 ./build.sh $(BRANCH)
+
+flash:
+	SKIP_FETCH=1 ./flash.sh $(BRANCH)
+
+flash-slow:
+	./flash.sh $(BRANCH)
+
+draw:
+	./draw.sh
+
+clean:
+	rm -rf keymap-drawer combined
+
+nuke:
+	-docker image rm $(DOCKER_IMAGE)
+	-docker volume rm $(DOCKER_VOLUME)
