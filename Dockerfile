@@ -13,16 +13,6 @@ RUN <<EOF
     GIT_DIR=/zmk git worktree add --detach /src
 EOF
 
-# Prepopulate the container's nix store with the build dependencies for the main
-# branch and the most recent three tags
-RUN <<EOF
-    cd /src
-    for tag in main $(git tag -l --sort=committerdate | tail -n 3); do
-      git checkout -q --detach $tag
-      nix-shell --run true -A zmk ./default.nix
-    done
-EOF
-
 COPY --chmod=755 <<EOF /bin/entrypoint.sh
 #!/usr/bin/env bash
     set -euo pipefail
@@ -30,12 +20,14 @@ COPY --chmod=755 <<EOF /bin/entrypoint.sh
 
     echo "Checking out \$BRANCH from moergo-sc/zmk" >&2
     cd /src
-    git fetch origin
+    if [ "\${SKIP_FETCH:-0}" != "1" ]; then
+        git fetch origin
+    fi
     git checkout -q --detach "\$BRANCH"
 
     echo 'Building Go60 firmware' >&2
     cd /config
-    nix-build ./config --arg firmware 'import /src/default.nix {}' -j2 -o /tmp/combined --show-trace
+    nix-build ./config --arg firmware 'import /src/default.nix {}' -j"\$(nproc)" --cores 8 -o /tmp/combined --show-trace
     install -o "\$UID" -g "\$GID" /tmp/combined/go60.uf2 ./go60.uf2
 EOF
 

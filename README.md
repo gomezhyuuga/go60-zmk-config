@@ -2,6 +2,14 @@
 
 ![MoErgo Logo](moergo_logo.png)
 
+## Keymap
+
+![Keymap](keymap-drawer/keymap.svg)
+
+The diagram above is rendered from [`config/go60.keymap`](config/go60.keymap) by [keymap-drawer](https://github.com/caksoylar/keymap-drawer). Regenerate locally with `./draw.sh`; CI also re-renders it on every push that touches the keymap.
+
+## About
+
 This repo is the official ZMK configuration of the MoErgo Go60 wireless split keyboard. Use it to develop your own keymap and easily build your own ZMK firmware to run on your Go60.
 
 **NOTE: You can also customize the layout of your Go60 keyboard with the Go60 Layout Editor webapp. For most users Go60 Layout Editor is the recommended and simpler option. More information is available at the official MoErgo Go60 Support site (see resources below).**
