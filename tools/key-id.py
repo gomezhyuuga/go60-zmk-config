@@ -16,6 +16,7 @@ import os
 import re
 import select
 import shutil
+import signal
 import sys
 import termios
 import tty
@@ -279,10 +280,31 @@ def render(state: dict, last_pos: str | None, last_repr: str) -> str:
         for line in kb_lines:
             out.append(f"{line}{EL}")
 
-    return "\n".join(out)
+    # Erase any leftover lines below this render (handles narrower / shorter
+    # frames after a resize or layer change).
+    return "\n".join(out) + "\x1b[J"
 
 
-def read_key(fd: int) -> str:
+RESIZE_SENTINEL = "__RESIZE__"
+
+
+def read_key(fd: int, wakeup_fd: int | None = None) -> str:
+    """Read one keypress, including multi-byte escape sequences.
+
+    If `wakeup_fd` is given (the read end of the SIGWINCH self-pipe),
+    a window-size change wakes the read and returns RESIZE_SENTINEL so
+    the caller can redraw."""
+    watch = [fd] + ([wakeup_fd] if wakeup_fd is not None else [])
+    while True:
+        rdy, _, _ = select.select(watch, [], [])
+        if wakeup_fd is not None and wakeup_fd in rdy:
+            try:
+                os.read(wakeup_fd, 1024)
+            except BlockingIOError:
+                pass
+            return RESIZE_SENTINEL
+        if fd in rdy:
+            break
     ch = os.read(fd, 1).decode("utf-8", errors="replace")
     if ch != "\x1b":
         return ch
@@ -392,6 +414,14 @@ def main() -> int:
     PREV_KEYS = {"\x1b[D", "\x1b[A", "\x1b[5~"}  # Left, Up, PgUp
     NEXT_KEYS = {"\x1b[C", "\x1b[B", "\x1b[6~"}  # Right, Down, PgDn
 
+    # Self-pipe + SIGWINCH so a terminal resize wakes our select() and we
+    # repaint immediately instead of waiting for the next keypress.
+    rd_fd, wr_fd = os.pipe()
+    os.set_blocking(rd_fd, False)
+    os.set_blocking(wr_fd, False)
+    prev_wakeup = signal.set_wakeup_fd(wr_fd)
+    prev_winch = signal.signal(signal.SIGWINCH, lambda *_: None)
+
     fd = sys.stdin.fileno()
     saved = termios.tcgetattr(fd)
     try:
@@ -404,9 +434,16 @@ def main() -> int:
         goto_buf = ""
         while True:
             try:
-                key = read_key(fd)
+                key = read_key(fd, rd_fd)
             except (KeyboardInterrupt, EOFError):
                 break
+
+            # Terminal was resized — repaint and continue waiting.
+            if key == RESIZE_SENTINEL:
+                sys.stdout.write(CLR)
+                sys.stdout.write(render(state, last_pos, last_repr))
+                sys.stdout.flush()
+                continue
 
             # Layer-jump prompt: 'g' starts it, then digits, then Enter / Esc.
             if goto_buf or key == "g":
@@ -459,6 +496,10 @@ def main() -> int:
             sys.stdout.flush()
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, saved)
+        signal.set_wakeup_fd(prev_wakeup)
+        signal.signal(signal.SIGWINCH, prev_winch)
+        os.close(rd_fd)
+        os.close(wr_fd)
         sys.stdout.write("\n")
         sys.stdout.flush()
     return 0

@@ -1,7 +1,8 @@
 DOCKER_IMAGE  := go60-zmk-config-docker
 DOCKER_VOLUME := go60-zmk-nix-store
+KEYMAP_WORD_RE := &?[A-Za-z_][A-Za-z_0-9]*(\([^)]*\))?
 
-.PHONY: help build build-fast build-rebuild flash flash-slow draw ident ident-html clean nuke
+.PHONY: help build build-fast build-rebuild flash flash-slow draw ident ident-html diff diff-keymap setup-git clean nuke
 
 help:
 	@echo "Targets:"
@@ -13,6 +14,9 @@ help:
 	@echo "  draw           Render keymap-drawer/keymap.svg from config/go60.keymap."
 	@echo "  ident          Run the terminal key-position identifier."
 	@echo "  ident-html     Open the browser-based key-position identifier."
+	@echo "  diff           Token-aware word-diff for the keymap (vs. HEAD)."
+	@echo "  diff-keymap    Same as diff. REF=<rev> compares against another ref."
+	@echo "  setup-git      Install a token-aware diff driver for *.keymap files."
 	@echo "  clean          Remove generated outputs (keymap-drawer/, combined symlink)."
 	@echo "  nuke           Drop the Docker image and Nix-store volume (full reset)."
 	@echo ""
@@ -41,6 +45,18 @@ ident:
 
 ident-html:
 	open tools/key-id.html
+
+# Word-aware diff for *.keymap. Treat each ZMK token as one "word" so a
+# single-key edit shows as a one-token swap rather than a 600-char line.
+diff diff-keymap:
+	@git diff --color-words='$(KEYMAP_WORD_RE)' $(if $(REF),$(REF) --,) -- config/go60.keymap
+
+# One-time: register a diff driver so plain `git diff` / `git log -p` use the
+# same word regex on *.keymap files (the .gitattributes line `diff=keymap`
+# activates only after this driver is installed).
+setup-git:
+	git config diff.keymap.wordRegex '$(KEYMAP_WORD_RE)'
+	@echo "OK — *.keymap diffs now use the token-aware word regex."
 
 clean:
 	rm -rf keymap-drawer combined
