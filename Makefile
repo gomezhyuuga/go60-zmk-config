@@ -1,7 +1,7 @@
 DOCKER_IMAGE  := go60-zmk-config-docker
 DOCKER_VOLUME := go60-zmk-nix-store
 
-.PHONY: help build build-fast build-rebuild flash flash-slow draw clean nuke
+.PHONY: help build build-fast build-rebuild flash flash-slow draw ident ident-html clean nuke
 
 help:
 	@echo "Targets:"
@@ -11,6 +11,8 @@ help:
 	@echo "  flash          Build (skipping fetch), then copy go60.uf2 onto the bootloader drive."
 	@echo "  flash-slow     Same as flash but does the in-container 'git fetch origin' first."
 	@echo "  draw           Render keymap-drawer/keymap.svg from config/go60.keymap."
+	@echo "  ident          Run the terminal key-position identifier."
+	@echo "  ident-html     Open the browser-based key-position identifier."
 	@echo "  clean          Remove generated outputs (keymap-drawer/, combined symlink)."
 	@echo "  nuke           Drop the Docker image and Nix-store volume (full reset)."
 	@echo ""
@@ -33,6 +35,12 @@ flash-slow:
 
 draw:
 	./draw.sh
+
+ident:
+	python3 tools/key-id.py
+
+ident-html:
+	open tools/key-id.html
 
 clean:
 	rm -rf keymap-drawer combined

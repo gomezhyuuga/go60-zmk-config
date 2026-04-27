@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Go60 Key Identifier</title>
+<style>
+  :root {
+    --bg: #1a1a1a; --panel: #242424; --key: #333; --keyhit: #4fc3f7;
+    --fg: #e0e0e0; --muted: #888; --accent: #4fc3f7; --warn: #f48fb1;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    background: var(--bg); color: var(--fg);
+    margin: 0; padding: 24px; line-height: 1.4;
+  }
+  h1 { font-size: 1.1rem; margin: 0 0 12px; font-weight: 600; }
+  #readout {
+    background: var(--panel); border-radius: 8px;
+    padding: 16px 20px; margin-bottom: 20px; min-height: 76px;
+  }
+  #readout .pos { font-size: 1.8rem; color: var(--accent); font-weight: 600; }
+  #readout .unmapped { font-size: 1.4rem; color: var(--warn); }
+  #readout .meta { color: var(--muted); font-size: 0.85rem; margin-top: 6px; }
+  #board {
+    display: grid; grid-template-columns: repeat(12, 1fr); gap: 4px;
+    max-width: 960px; margin-bottom: 8px;
+  }
+  .key {
+    background: var(--key); border-radius: 4px; padding: 6px 4px;
+    text-align: center; aspect-ratio: 1.05; display: flex;
+    flex-direction: column; justify-content: center; gap: 4px;
+    transition: background 80ms ease;
+  }
+  .key.hit { background: var(--keyhit); color: #000; }
+  .key .pos { font-size: 0.65rem; font-weight: 600; opacity: 0.85; }
+  .key .label { font-size: 0.7rem; color: var(--muted); }
+  .key.hit .label { color: #000; opacity: 0.7; }
+  .thumbs {
+    display: grid; grid-template-columns: 1fr 1fr 1fr 80px 1fr 1fr 1fr;
+    gap: 4px; max-width: 960px; margin-top: 8px;
+  }
+  .thumbs .spacer { background: transparent; }
+  p.note {
+    color: var(--muted); margin-top: 24px; max-width: 720px; font-size: 0.85rem;
+  }
+  code {
+    background: var(--panel); padding: 1px 6px; border-radius: 3px;
+    font-size: 0.85em;
+  }
+</style>
+</head>
+<body>
+  <h1>Go60 Key Identifier <span style="color:var(--muted);font-weight:400">— click here, then press a key on the Go60</span></h1>
+  <div id="readout">Waiting for a keypress…</div>
+  <div id="board"></div>
+  <div id="thumbs" class="thumbs"></div>
+
+  <p class="note">
+    Maps each <code>KeyboardEvent.code</code> back to its <code>POS_*</code> label
+    on the Go60 matrix. Tap each key to identify it.
+    Home-row mods (A&nbsp;S&nbsp;D&nbsp;F&nbsp;J&nbsp;K&nbsp;L&nbsp;;) report on tap;
+    holding sends a modifier and may not produce a discrete event here.
+    Layer / magic / bootloader / mouse keys produce no host event and won't be detected —
+    those are easy to identify by elimination.
+  </p>
+
+  <script>
+  // Main 4x12 grid, in physical order (row 1 = number row, row 4 = bottom row).
+  // Source: config/info.json labels, mirroring the POS_* defines in the keymap.
+  const grid = [
+    ['LH_C6R1','LH_C5R1','LH_C4R1','LH_C3R1','LH_C2R1','LH_C1R1','RH_C1R1','RH_C2R1','RH_C3R1','RH_C4R1','RH_C5R1','RH_C6R1'],
+    ['LH_C6R2','LH_C5R2','LH_C4R2','LH_C3R2','LH_C2R2','LH_C1R2','RH_C1R2','RH_C2R2','RH_C3R2','RH_C4R2','RH_C5R2','RH_C6R2'],
+    ['LH_C6R3','LH_C5R3','LH_C4R3','LH_C3R3','LH_C2R3','LH_C1R3','RH_C1R3','RH_C2R3','RH_C3R3','RH_C4R3','RH_C5R3','RH_C6R3'],
+    ['LH_C6R4','LH_C5R4','LH_C4R4','LH_C3R4','LH_C2R4','LH_C1R4','RH_C1R4','RH_C2R4','RH_C3R4','RH_C4R4','RH_C5R4','RH_C6R4'],
+  ];
+  const labels = [
+    ['=','1','2','3','4','5','6','7','8','9','0','-'],
+    ['Tab','Q','W','E','R','T','Y','U','I','O','P','\\'],
+    ['Esc','A','S','D','F','G','H','J','K','L',';',"'"],
+    ['—','Z','X','C','V','B','N','M',',','.','/','—'],
+  ];
+
+  // Thumb cluster: 3 left + center spacer + 3 right.
+  const thumbGrid = ['LT_T3','LT_T2','LT_T1', null, 'RT_T1','RT_T2','RT_T3'];
+  const thumbLabels = ['Spc','Ent','Bsp', null, 'RAlt','Ent','Spc'];
+
+  // event.code → POS_* (the position relative to the matrix; the label
+  // here is appended to "POS_" when displayed). Only includes physical keys
+  // that produce a keydown when tapped — modifiers, layer keys, etc. are
+  // intentionally absent.
+  const codeToPos = {
+    // Row 1
+    Equal:'LH_C6R1', Digit1:'LH_C5R1', Digit2:'LH_C4R1', Digit3:'LH_C3R1', Digit4:'LH_C2R1', Digit5:'LH_C1R1',
+    Digit6:'RH_C1R1', Digit7:'RH_C2R1', Digit8:'RH_C3R1', Digit9:'RH_C4R1', Digit0:'RH_C5R1', Minus:'RH_C6R1',
+    // Row 2
+    Tab:'LH_C6R2', KeyQ:'LH_C5R2', KeyW:'LH_C4R2', KeyE:'LH_C3R2', KeyR:'LH_C2R2', KeyT:'LH_C1R2',
+    KeyY:'RH_C1R2', KeyU:'RH_C2R2', KeyI:'RH_C3R2', KeyO:'RH_C4R2', KeyP:'RH_C5R2', Backslash:'RH_C6R2',
+    // Row 3 (home row — homerow mods on A S D F J K L ; report tap value)
+    Escape:'LH_C6R3', KeyA:'LH_C5R3', KeyS:'LH_C4R3', KeyD:'LH_C3R3', KeyF:'LH_C2R3', KeyG:'LH_C1R3',
+    KeyH:'RH_C1R3', KeyJ:'RH_C2R3', KeyK:'RH_C3R3', KeyL:'RH_C4R3', Semicolon:'RH_C5R3', Quote:'RH_C6R3',
+    // Row 4
+    KeyZ:'LH_C5R4', KeyX:'LH_C4R4', KeyC:'LH_C3R4', KeyV:'LH_C2R4', KeyB:'LH_C1R4',
+    KeyN:'RH_C1R4', KeyM:'RH_C2R4', Comma:'RH_C3R4', Period:'RH_C4R4', Slash:'RH_C5R4',
+    // Thumbs (best-effort — depends on what the layer binds them to)
+    Space:'LT_T3', Enter:'RT_T2', Backspace:'LT_T1',
+    AltRight:'RT_T1',
+  };
+
+  const board = document.getElementById('board');
+  const thumbs = document.getElementById('thumbs');
+  const elByPos = {};
+
+  function makeKey(pos, label) {
+    const div = document.createElement('div');
+    div.className = 'key';
+    if (!pos) { div.classList.add('spacer'); return div; }
+    div.dataset.pos = pos;
+    div.innerHTML = `<div class="pos">${pos}</div><div class="label">${label}</div>`;
+    elByPos[pos] = div;
+    return div;
+  }
+
+  grid.forEach((row, r) => row.forEach((pos, c) => board.appendChild(makeKey(pos, labels[r][c]))));
+  thumbGrid.forEach((pos, i) => thumbs.appendChild(makeKey(pos, thumbLabels[i])));
+
+  const readout = document.getElementById('readout');
+
+  document.addEventListener('keydown', (e) => {
+    e.preventDefault();
+    Object.values(elByPos).forEach(el => el.classList.remove('hit'));
+    const pos = codeToPos[e.code];
+    if (pos) {
+      elByPos[pos]?.classList.add('hit');
+      readout.innerHTML =
+        `<span class="pos">POS_${pos}</span>` +
+        `<div class="meta">event.code = <code>${e.code}</code> &nbsp;·&nbsp; event.key = <code>${JSON.stringify(e.key)}</code></div>`;
+    } else {
+      readout.innerHTML =
+        `<span class="unmapped">unmapped — ${e.code || '(no code)'}</span>` +
+        `<div class="meta">event.key = <code>${JSON.stringify(e.key)}</code> · this keypress isn't on a position the host can see (layer/magic key, or a modifier from a homerow-mod hold)</div>`;
+    }
+  });
+  </script>
+</body>
+</html>
