@@ -15,10 +15,17 @@ import json
 import os
 import re
 import select
+import shutil
 import sys
 import termios
 import tty
 from pathlib import Path
+
+ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def visible_len(s: str) -> int:
+    return len(ANSI_RE.sub("", s))
 
 ROOT = Path(__file__).resolve().parent.parent
 KEYMAP = ROOT / "config" / "go60.keymap"
@@ -203,13 +210,53 @@ def cell(label: str, hit: bool) -> str:
     return f"{s}"
 
 
+KB_WIDTH = 80  # visible width reserved for the keyboard area
+PANEL_MIN_TERM_W = 104  # terminal must be at least this wide to show the panel
+
+
+def build_keyboard_lines(state: dict, last_pos: str | None) -> list[str]:
+    cells = state["cells"]
+    lines: list[str] = []
+    for row in ROWS:
+        left_parts, right_parts = [], []
+        for i, (pos, fallback) in enumerate(row):
+            label = "" if pos is None else cells.get(pos, fallback)
+            (left_parts if i < 6 else right_parts).append(cell(label, pos == last_pos))
+        lines.append(f"  {''.join(left_parts)}{GAP}{''.join(right_parts)}")
+    lines.append("")
+    pad = " " * (2 + CELL_W * 3)
+    thumbs_l = "".join(cell(cells.get(p, fb), p == last_pos) for p, fb in THUMBS[:3])
+    thumbs_r = "".join(cell(cells.get(p, fb), p == last_pos) for p, fb in THUMBS[3:])
+    lines.append(f"{pad}{thumbs_l}{GAP}{thumbs_r}")
+    lines.append("")
+    lines.append(f"{DIM}Tip: home-row mods / layer / mouse / bootloader keys won't surface here.{RST}")
+    lines.append(f"{DIM}     ←/→ cycle layers · 'g' jump-to-layer · 'q' quit{RST}")
+    return lines
+
+
+def build_layer_panel(state: dict) -> list[str]:
+    layers = state["all_layers"]
+    if not layers or layers == ["(none)"]:
+        return []
+    lines = [f"{BOLD}Layers{RST}{DIM} (←/→, g<n>⏎){RST}"]
+    for i, name in enumerate(layers):
+        cur = i == state["layer_idx"]
+        marker = f"{CYAN}▶{RST}" if cur else " "
+        nm = f"{BOLD}{YEL}{name}{RST}" if cur else name
+        lines.append(f"{marker} {i:2d}  {nm}")
+    return lines
+
+
 def render(state: dict, last_pos: str | None, last_repr: str) -> str:
+    term_w = shutil.get_terminal_size((80, 24)).columns
+    show_panel = term_w >= PANEL_MIN_TERM_W and bool(state["all_layers"]) and state["all_layers"] != ["(none)"]
+
     out: list[str] = [HOME]
     layer = state["layer_name"]
     layers = state["all_layers"]
     out.append(f"{BOLD}Go60 Key Identifier{RST}{DIM} — press a key, 'q' to quit{RST}{EL}")
     out.append(f"{DIM}Layer:{RST} {YEL}{layer}{RST}  {DIM}({state['layer_idx'] + 1}/{len(layers)}){RST}{EL}")
-    out.append(f"{DIM}{'─' * 78}{RST}{EL}")
+    out.append(f"{DIM}{'─' * min(term_w - 1, 110)}{RST}{EL}")
     if last_pos:
         out.append(f"Last: {CYAN}{BOLD}POS_{last_pos}{RST}   {DIM}{last_repr}{RST}{EL}")
     elif last_repr:
@@ -218,21 +265,20 @@ def render(state: dict, last_pos: str | None, last_repr: str) -> str:
         out.append(f"{DIM}Press a key on the Go60…{RST}{EL}")
     out.append(EL)
 
-    cells = state["cells"]
-    for row in ROWS:
-        left_parts, right_parts = [], []
-        for i, (pos, fallback) in enumerate(row):
-            label = "" if pos is None else cells.get(pos, fallback)
-            (left_parts if i < 6 else right_parts).append(cell(label, pos == last_pos))
-        out.append(f"  {''.join(left_parts)}{GAP}{''.join(right_parts)}{EL}")
-    out.append(EL)
-    pad = " " * (2 + CELL_W * 3)
-    thumbs_l = "".join(cell(cells.get(p, fb), p == last_pos) for p, fb in THUMBS[:3])
-    thumbs_r = "".join(cell(cells.get(p, fb), p == last_pos) for p, fb in THUMBS[3:])
-    out.append(f"{pad}{thumbs_l}{GAP}{thumbs_r}{EL}")
-    out.append(EL)
-    out.append(f"{DIM}Tip: home-row mods / layer / mouse / bootloader keys won't surface here.{RST}{EL}")
-    out.append(f"{DIM}     Use --layer NAME to view a different layer's labels.{RST}{EL}")
+    kb_lines = build_keyboard_lines(state, last_pos)
+
+    if show_panel:
+        panel = build_layer_panel(state)
+        rows = max(len(kb_lines), len(panel))
+        for i in range(rows):
+            kb = kb_lines[i] if i < len(kb_lines) else ""
+            kb_padded = kb + " " * max(0, KB_WIDTH - visible_len(kb))
+            ly = panel[i] if i < len(panel) else ""
+            out.append(f"{kb_padded}{DIM}│ {RST}{ly}{EL}")
+    else:
+        for line in kb_lines:
+            out.append(f"{line}{EL}")
+
     return "\n".join(out)
 
 
@@ -320,19 +366,31 @@ def main() -> int:
             return 2
         layer_idx = layer_names.index(args.layer)
 
-    layer_data = info["layers"][layer_idx] if (info and layer_names) else None
-    cells = build_cells(layer_data, pos_to_idx)
-
     state = {
-        "cells": cells,
         "layer_idx": layer_idx,
         "layer_name": layer_names[layer_idx] if layer_names else "(no info.json)",
         "all_layers": layer_names or ["(none)"],
+        "cells": {},
     }
+
+    def set_layer(new_idx: int) -> None:
+        if not (info and layer_names):
+            return
+        new_idx %= len(layer_names)
+        state["layer_idx"] = new_idx
+        state["layer_name"] = layer_names[new_idx]
+        state["cells"] = build_cells(info["layers"][new_idx], pos_to_idx)
+
+    set_layer(layer_idx)
 
     if not sys.stdin.isatty():
         print("error: stdin is not a tty", file=sys.stderr)
         return 2
+
+    # Multi-byte sequences that aren't on the Base/HRM layer — used as
+    # CLI commands without colliding with position-identification.
+    PREV_KEYS = {"\x1b[D", "\x1b[A", "\x1b[5~"}  # Left, Up, PgUp
+    NEXT_KEYS = {"\x1b[C", "\x1b[B", "\x1b[6~"}  # Right, Down, PgDn
 
     fd = sys.stdin.fileno()
     saved = termios.tcgetattr(fd)
@@ -343,13 +401,58 @@ def main() -> int:
         sys.stdout.flush()
         last_pos: str | None = None
         last_repr = ""
+        goto_buf = ""
         while True:
             try:
                 key = read_key(fd)
             except (KeyboardInterrupt, EOFError):
                 break
+
+            # Layer-jump prompt: 'g' starts it, then digits, then Enter / Esc.
+            if goto_buf or key == "g":
+                if key == "g" and not goto_buf:
+                    goto_buf = ":"  # mark active
+                    last_repr = "go-to-layer (digits + Enter, Esc to cancel)"
+                    last_pos = None
+                elif key in ("\x1b", "\x03"):
+                    goto_buf = ""
+                    last_repr = "cancelled"
+                elif key in ("\r", "\n"):
+                    digits = goto_buf[1:]
+                    if digits.isdigit():
+                        idx = int(digits)
+                        if 0 <= idx < len(state["all_layers"]):
+                            set_layer(idx)
+                            last_repr = f"jumped to layer {idx}"
+                        else:
+                            last_repr = f"layer {idx} out of range"
+                    goto_buf = ""
+                elif key.isdigit():
+                    goto_buf += key
+                    last_repr = f"go-to-layer: {goto_buf[1:]}_"
+                else:
+                    last_repr = f"go-to-layer: {goto_buf[1:]} (digit, Enter, Esc)"
+                sys.stdout.write(render(state, None, last_repr))
+                sys.stdout.flush()
+                continue
+
             if key in ("q", "\x03"):
                 break
+            if key in PREV_KEYS:
+                set_layer(state["layer_idx"] - 1)
+                last_pos = None
+                last_repr = f"layer ← {state['layer_name']}"
+                sys.stdout.write(render(state, last_pos, last_repr))
+                sys.stdout.flush()
+                continue
+            if key in NEXT_KEYS:
+                set_layer(state["layer_idx"] + 1)
+                last_pos = None
+                last_repr = f"layer → {state['layer_name']}"
+                sys.stdout.write(render(state, last_pos, last_repr))
+                sys.stdout.flush()
+                continue
+
             last_pos = lookup(key)
             last_repr = describe(key)
             sys.stdout.write(render(state, last_pos, last_repr))
