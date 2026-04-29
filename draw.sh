@@ -29,7 +29,7 @@ mkdir -p "$LAYER_DIR"
 rm -f "$LAYER_DIR"/*.svg
 
 # Skip per-finger HRM helper layers, autoshift, and the Mouse{Slow,Fast,Warp} variants.
-SKIP_RE='(Pinky|Middy|Index)$|^Autoshift$|^Mouse(Slow|Fast|Warp)$'
+SKIP_RE='(Pinky|Middy|Index|Ringy)$|^Autoshift$|^Mouse(Slow|Fast|Warp)$'
 
 # Layer names are the top-level keys under `layers:` in the yaml.
 idx=0
