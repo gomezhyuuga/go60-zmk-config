@@ -2,3 +2,4 @@
 *.uf2
 .DS_Store
 /tools/__pycache__/*
+tools/layer-popup
