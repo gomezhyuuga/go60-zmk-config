@@ -10,7 +10,7 @@ layers:
   - '6'
   - '7'
   - '8'
-  - '9'
+  - '&caps_word'
   - '0'
   - Sft+2
   - '&td_shift_caps'
@@ -36,7 +36,7 @@ layers:
   - {t: K, h: '&HRM_right_middy_hold_v1B_TKZ RGUI'}
   - {t: L, h: '&HRM_right_ring_hold_v1B_TKZ LALT'}
   - {t: Sft+;, h: '&HRM_right_pinky_hold_v1B_TKZ RCTRL'}
-  - ''''
+  - {t: '"', s: ''''}
   - {t: '&rgb_ug_status_macro', h: Magic}
   - Z
   - X
@@ -52,13 +52,13 @@ layers:
   - '&td_LAYER_Mouse'
   - {t: LGUI, h: sticky}
   - TAB
-  - '-'
+  - '&mkp LCLK'
   - '['
   - ']'
   - {t: SPACE, h: Cursor}
   - {t: RET, h: Keypad}
   - BSPC
-  - '&mkp LCLK'
+  - '-'
   - {t: RET, h: fn}
   - {t: SPACE, h: Symbol}
   Typing:

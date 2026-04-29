@@ -21,7 +21,30 @@ mkdir -p "$OUT"
     keymap parse -z config/go60.keymap | grep -v '^layout:'
 } > "$OUT/keymap.yaml"
 
-keymap draw "$OUT/keymap.yaml" > "$OUT/keymap.svg"
-
 echo "→ $OUT/keymap.yaml"
-echo "→ $OUT/keymap.svg"
+
+# One SVG per layer, into keymap-drawer/layers/.
+LAYER_DIR="$OUT/layers"
+mkdir -p "$LAYER_DIR"
+rm -f "$LAYER_DIR"/*.svg
+
+# Skip per-finger HRM helper layers, autoshift, and the Mouse{Slow,Fast,Warp} variants.
+SKIP_RE='(Pinky|Middy|Index)$|^Autoshift$|^Mouse(Slow|Fast|Warp)$'
+
+# Layer names are the top-level keys under `layers:` in the yaml.
+idx=0
+while read -r layer; do
+    [ -z "$layer" ] && continue
+    if [[ "$layer" =~ $SKIP_RE ]]; then
+        echo "  skip $layer"
+        continue
+    fi
+    name="$(printf '%02d' $idx)_${layer}"
+    keymap draw -s "$layer" -- "$OUT/keymap.yaml" > "$LAYER_DIR/$name.svg" < /dev/null
+    echo "→ $LAYER_DIR/$name.svg"
+    idx=$((idx + 1))
+done < <(python3 -c "
+import yaml
+with open('$OUT/keymap.yaml') as f: d = yaml.safe_load(f)
+print('\n'.join(d.get('layers', {}).keys()))
+")
