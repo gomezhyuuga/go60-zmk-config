@@ -150,6 +150,7 @@ TEMPLATE = r"""<!DOCTYPE html>
     --bg:#0f1115; --panel:#171a21; --key:#232834; --edge:#2e3645;
     --text:#e7ecf3; --muted:#8a93a6;
     --c-layer:#6cc2ff; --c-dual:#ffb454; --c-held:#ff7a93; --c-trans:#3a4150;
+    --m-cmd:#ff5c5c; --m-opt:#7ed492; --m-sft:#7cc4ff; --m-ctl:#ffc14d;
     --unit:64px; --keysize:58px;
   }
   * { box-sizing:border-box; }
@@ -189,6 +190,9 @@ TEMPLATE = r"""<!DOCTYPE html>
     font-size:8.5px; line-height:1.05; margin-top:2px; letter-spacing:.2px;
     color:var(--c-dual); text-transform:uppercase; word-break:break-word;
   }
+  /* per-modifier accent colors (used in key labels and the legend) */
+  .m-cmd { color:var(--m-cmd); } .m-opt { color:var(--m-opt); }
+  .m-sft { color:var(--m-sft); } .m-ctl { color:var(--m-ctl); }
   .key.layer { border-color:#245067; }
   .key.layer .tap { color:var(--c-layer); }
   .key.layer .hold { color:var(--c-layer); }
@@ -251,7 +255,7 @@ TEMPLATE = r"""<!DOCTYPE html>
     <span class="item"><span class="sw" style="background:var(--c-dual)"></span> Hold = modifier</span>
     <span class="item"><span class="sw" style="background:var(--c-held)"></span> Held key</span>
     <span class="item"><span class="sw" style="background:var(--c-trans)"></span> ▽ transparent</span>
-    <span class="item">⌘ Cmd · ⌥ Opt · ⇧ Shift · ⌃ Ctrl</span>
+    <span class="item"><span class="m-cmd">⌘</span> Cmd · <span class="m-opt">⌥</span> Opt · <span class="m-sft">⇧</span> Shift · <span class="m-ctl">⌃</span> Ctrl</span>
   </div>
   <div class="row">
     <kbd>Tab</kbd> show <b id="modecount">1</b> / 2 / 4 layers
@@ -271,7 +275,7 @@ const LS_KEY = "go60LayoutUI";
 // Tab cycles how many layers are shown at once.
 const MODES = [
   { count: 1, scale: 1.00, cols: 1 },
-  { count: 2, scale: 0.55, cols: 2 },  // side by side
+  { count: 2, scale: 0.66, cols: 1 },  // stacked vertically
   { count: 4, scale: 0.50, cols: 2 },  // 2x2
 ];
 
@@ -302,6 +306,15 @@ const modecount = document.getElementById("modecount");
 
 function esc(s){ const d=document.createElement("div"); d.textContent=s; return d.innerHTML; }
 
+// Wrap each modifier glyph in a colored span (run on already-escaped text).
+function colorMods(s){
+  return s
+    .replaceAll("⌘", '<span class="m-cmd">⌘</span>')
+    .replaceAll("⌥", '<span class="m-opt">⌥</span>')
+    .replaceAll("⇧", '<span class="m-sft">⇧</span>')
+    .replaceAll("⌃", '<span class="m-ctl">⌃</span>');
+}
+
 function buildBoard(name) {
   const board = document.createElement("div");
   board.className = "board";
@@ -316,8 +329,8 @@ function buildBoard(name) {
       el.style.transform = "rotate(" + g.r + "deg)";
     }
     let inner = "";
-    if (k.tap) inner += `<div class="tap">${esc(k.tap)}</div>`;
-    if (k.hold) inner += `<div class="hold">${esc(k.hold)}</div>`;
+    if (k.tap) inner += `<div class="tap">${colorMods(esc(k.tap))}</div>`;
+    if (k.hold) inner += `<div class="hold">${colorMods(esc(k.hold))}</div>`;
     inner += `<span class="pos">${esc(g.label)}</span>`;
     el.innerHTML = inner;
     board.appendChild(el);
