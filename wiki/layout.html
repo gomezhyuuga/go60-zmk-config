@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Go60 Layout</title>
+<style>
+  :root {
+    --bg:#0f1115; --panel:#171a21; --key:#232834; --edge:#2e3645;
+    --text:#e7ecf3; --muted:#8a93a6;
+    --c-layer:#6cc2ff; --c-dual:#ffb454; --c-held:#ff7a93; --c-trans:#3a4150;
+    --unit:64px; --keysize:58px;
+  }
+  * { box-sizing:border-box; }
+  body {
+    margin:0; color:var(--text);
+    font-family:ui-sans-serif,-apple-system,"SF Pro Text","Segoe UI",Roboto,sans-serif;
+    background:radial-gradient(1200px 700px at 50% -10%,#1a1f2b,var(--bg));
+    padding:24px 16px;
+    min-height:100vh;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+  }
+  .grid { display:flex; gap:18px 22px; justify-content:center; align-items:flex-start; }
+  .slot { display:flex; flex-direction:column; align-items:center; gap:7px; }
+  .slot .title {
+    display:flex; align-items:center; gap:6px; font-size:12.5px; color:var(--text);
+  }
+  .slot .title .num {
+    display:inline-flex; align-items:center; justify-content:center;
+    width:16px; height:16px; border-radius:4px; font-size:10px; font-weight:700;
+    background:var(--c-layer); color:#0f1115;
+  }
+  .board-wrap { position:relative; }
+  .board {
+    position:absolute; top:0; left:0; transform-origin:top left;
+    width:calc(17.7 * var(--unit)); height:calc(6.7 * var(--unit));
+  }
+  .key {
+    position:absolute; width:var(--keysize); height:var(--keysize);
+    background:linear-gradient(180deg,var(--key),#1d222c);
+    border:2px solid var(--edge); border-radius:8px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:3px; text-align:center; overflow:hidden;
+    box-shadow:0 2px 0 #00000055, inset 0 1px 0 #ffffff08;
+  }
+  .key .tap { font-size:12px; font-weight:600; line-height:1.05; word-break:break-word; }
+  .key .hold {
+    font-size:8.5px; line-height:1.05; margin-top:2px; letter-spacing:.2px;
+    color:var(--c-dual); text-transform:uppercase; word-break:break-word;
+  }
+  .key.layer { border-color:#245067; }
+  .key.layer .tap { color:var(--c-layer); }
+  .key.layer .hold { color:var(--c-layer); }
+  .key.dual { border-color:#5a4524; }
+  .key.held { border-color:var(--c-held); box-shadow:0 0 0 1px var(--c-held) inset, 0 2px 0 #00000055; }
+  .key.held .tap { color:var(--c-held); }
+  .key.trans { opacity:.32; }
+  .key.trans .tap { color:var(--muted); font-weight:400; }
+  .key.blank { opacity:.5; }
+  .pos { position:absolute; top:2px; right:4px; font-size:7px; color:#475061; }
+
+  .navbar {
+    margin:20px auto 0; display:flex; flex-wrap:nowrap;
+    gap:4px; justify-content:center;
+  }
+  .nav {
+    display:flex; align-items:center; gap:5px; cursor:pointer; white-space:nowrap;
+    background:var(--panel); border:1px solid var(--edge); border-radius:7px;
+    padding:3px 8px 3px 4px; font-size:11px; color:var(--muted); transition:.12s;
+  }
+  .nav:hover { color:var(--text); border-color:#3a4456; }
+  .nav.active { background:#26354a; border-color:var(--c-layer); color:#dff0ff; }
+  .nav .num {
+    display:inline-flex; align-items:center; justify-content:center;
+    width:15px; height:15px; border-radius:4px; font-size:10px; font-weight:700;
+    background:#00000040; color:var(--c-layer);
+  }
+  .nav.active .num { background:var(--c-layer); color:#0f1115; }
+
+  footer {
+    margin-top:22px; max-width:780px; display:flex; flex-direction:column;
+    align-items:center; gap:8px; font-size:12px; color:var(--muted);
+  }
+  footer .row { display:flex; flex-wrap:wrap; gap:7px 18px; justify-content:center; }
+  footer .item { display:flex; align-items:center; gap:6px; }
+  footer .sw { width:11px; height:11px; border-radius:3px; display:inline-block; }
+  footer kbd {
+    font-family:inherit; font-size:11px; color:var(--text);
+    background:#00000040; border:1px solid var(--edge);
+    border-radius:5px; padding:1px 6px;
+  }
+  footer .gen { font-size:10.5px; color:#4d566a; margin-top:2px; }
+</style>
+</head>
+<body>
+<div class="grid" id="grid"></div>
+
+<div class="navbar" id="navbar"></div>
+
+<footer>
+  <div class="row">
+    <span class="item"><span class="sw" style="background:var(--c-layer)"></span> Layer switch</span>
+    <span class="item"><span class="sw" style="background:var(--c-dual)"></span> Hold = modifier</span>
+    <span class="item"><span class="sw" style="background:var(--c-held)"></span> Held key</span>
+    <span class="item"><span class="sw" style="background:var(--c-trans)"></span> ▽ transparent</span>
+    <span class="item">⌘ Cmd · ⌥ Opt · ⇧ Shift · ⌃ Ctrl</span>
+  </div>
+  <div class="row">
+    <kbd>Tab</kbd> show <b id="modecount">1</b> / 2 / 4 layers
+    <kbd>←</kbd> <kbd>→</kbd> move
+    <kbd>1</kbd>–<kbd>9</kbd> jump to layer
+  </div>
+  <div class="gen">Generated from <code>keymap-drawer/keymap.yaml</code> + <code>config/info.json</code> by <code>tools/gen-layout-html.py</code></div>
+</footer>
+
+<script>
+const DATA = {"geo": [{"x": 0, "y": 0.5, "r": 0, "rx": 0, "ry": 0.5}, {"x": 1, "y": 0.5, "r": 0, "rx": 1, "ry": 0.5}, {"x": 2, "y": 0, "r": 0, "rx": 2, "ry": 0}, {"x": 3, "y": 0, "r": 0, "rx": 3, "ry": 0}, {"x": 4, "y": 0, "r": 0, "rx": 4, "ry": 0}, {"x": 5, "y": 0, "r": 0, "rx": 5, "ry": 0}, {"x": 11.5, "y": 0, "r": 0, "rx": 11.5, "ry": 0}, {"x": 12.5, "y": 0, "r": 0, "rx": 12.5, "ry": 0}, {"x": 13.5, "y": 0, "r": 0, "rx": 13.5, "ry": 0}, {"x": 14.5, "y": 0, "r": 0, "rx": 14.5, "ry": 0}, {"x": 15.5, "y": 0.5, "r": 0, "rx": 15.5, "ry": 0.5}, {"x": 16.5, "y": 0.5, "r": 0, "rx": 16.5, "ry": 0.5}, {"x": 0, "y": 1.5, "r": 0, "rx": 0, "ry": 1.5}, {"x": 1, "y": 1.5, "r": 0, "rx": 1, "ry": 1.5}, {"x": 2, "y": 1, "r": 0, "rx": 2, "ry": 1}, {"x": 3, "y": 1, "r": 0, "rx": 3, "ry": 1}, {"x": 4, "y": 1, "r": 0, "rx": 4, "ry": 1}, {"x": 5, "y": 1, "r": 0, "rx": 5, "ry": 1}, {"x": 11.5, "y": 1, "r": 0, "rx": 11.5, "ry": 1}, {"x": 12.5, "y": 1, "r": 0, "rx": 12.5, "ry": 1}, {"x": 13.5, "y": 1, "r": 0, "rx": 13.5, "ry": 1}, {"x": 14.5, "y": 1, "r": 0, "rx": 14.5, "ry": 1}, {"x": 15.5, "y": 1.5, "r": 0, "rx": 15.5, "ry": 1.5}, {"x": 16.5, "y": 1.5, "r": 0, "rx": 16.5, "ry": 1.5}, {"x": 0, "y": 2.5, "r": 0, "rx": 0, "ry": 2.5}, {"x": 1, "y": 2.5, "r": 0, "rx": 1, "ry": 2.5}, {"x": 2, "y": 2, "r": 0, "rx": 2, "ry": 2}, {"x": 3, "y": 2, "r": 0, "rx": 3, "ry": 2}, {"x": 4, "y": 2, "r": 0, "rx": 4, "ry": 2}, {"x": 5, "y": 2, "r": 0, "rx": 5, "ry": 2}, {"x": 11.5, "y": 2, "r": 0, "rx": 11.5, "ry": 2}, {"x": 12.5, "y": 2, "r": 0, "rx": 12.5, "ry": 2}, {"x": 13.5, "y": 2, "r": 0, "rx": 13.5, "ry": 2}, {"x": 14.5, "y": 2, "r": 0, "rx": 14.5, "ry": 2}, {"x": 15.5, "y": 2.5, "r": 0, "rx": 15.5, "ry": 2.5}, {"x": 16.5, "y": 2.5, "r": 0, "rx": 16.5, "ry": 2.5}, {"x": 0, "y": 3.5, "r": 0, "rx": 0, "ry": 3.5}, {"x": 1, "y": 3.5, "r": 0, "rx": 1, "ry": 3.5}, {"x": 2, "y": 3, "r": 0, "rx": 2, "ry": 3}, {"x": 3, "y": 3, "r": 0, "rx": 3, "ry": 3}, {"x": 4, "y": 3, "r": 0, "rx": 4, "ry": 3}, {"x": 5, "y": 3, "r": 0, "rx": 5, "ry": 3}, {"x": 11.5, "y": 3, "r": 0, "rx": 11.5, "ry": 3}, {"x": 12.5, "y": 3, "r": 0, "rx": 12.5, "ry": 3}, {"x": 13.5, "y": 3, "r": 0, "rx": 13.5, "ry": 3}, {"x": 14.5, "y": 3, "r": 0, "rx": 14.5, "ry": 3}, {"x": 15.5, "y": 3.5, "r": 0, "rx": 15.5, "ry": 3.5}, {"x": 16.5, "y": 3.5, "r": 0, "rx": 16.5, "ry": 3.5}, {"x": 2, "y": 4, "r": 0, "rx": 2, "ry": 4}, {"x": 3, "y": 4, "r": 0, "rx": 3, "ry": 4}, {"x": 4, "y": 4, "r": 0, "rx": 4, "ry": 4}, {"x": 12.5, "y": 4, "r": 0, "rx": 12.5, "ry": 4}, {"x": 13.5, "y": 4, "r": 0, "rx": 13.5, "ry": 4}, {"x": 14.5, "y": 4, "r": 0, "rx": 14.5, "ry": 4}, {"x": 5.2, "y": 4.1, "r": 12.5, "rx": 5.2, "ry": 4.1}, {"x": 6.4, "y": 4.4, "r": 25, "rx": 6.4, "ry": 4.4}, {"x": 7.5, "y": 4.95, "r": 37, "rx": 7.5, "ry": 4.95}, {"x": 9.15, "y": 5.5, "r": -37, "rx": 9.15, "ry": 5.5}, {"x": 10.15, "y": 4.8, "r": -25, "rx": 10.15, "ry": 4.8}, {"x": 11.3, "y": 4.3, "r": -12.5, "rx": 11.3, "ry": 4.3}], "layers": {"HRM_macOS": [{"tap": "=", "hold": "", "kind": "key"}, {"tap": "1", "hold": "", "kind": "key"}, {"tap": "2", "hold": "", "kind": "key"}, {"tap": "3", "hold": "", "kind": "key"}, {"tap": "4", "hold": "", "kind": "key"}, {"tap": "5", "hold": "", "kind": "key"}, {"tap": "6", "hold": "", "kind": "key"}, {"tap": "7", "hold": "", "kind": "key"}, {"tap": "8", "hold": "", "kind": "key"}, {"tap": "caps_word", "hold": "", "kind": "key"}, {"tap": "0", "hold": "", "kind": "key"}, {"tap": "⇧2", "hold": "", "kind": "key"}, {"tap": "td_shift_caps", "hold": "", "kind": "key"}, {"tap": "Q", "hold": "", "kind": "key"}, {"tap": "W", "hold": "", "kind": "key"}, {"tap": "E", "hold": "", "kind": "key"}, {"tap": "R", "hold": "", "kind": "key"}, {"tap": "T", "hold": "", "kind": "key"}, {"tap": "Y", "hold": "", "kind": "key"}, {"tap": "U", "hold": "", "kind": "key"}, {"tap": "I", "hold": "", "kind": "key"}, {"tap": "O", "hold": "", "kind": "key"}, {"tap": "P", "hold": "", "kind": "key"}, {"tap": "td_shift_caps", "hold": "", "kind": "key"}, {"tap": "⎋", "hold": "⌃", "kind": "dual"}, {"tap": "A", "hold": "⌃", "kind": "dual"}, {"tap": "S", "hold": "⌥", "kind": "dual"}, {"tap": "D", "hold": "⌘", "kind": "dual"}, {"tap": "F", "hold": "⇧", "kind": "dual"}, {"tap": "G", "hold": "", "kind": "key"}, {"tap": "H", "hold": "", "kind": "key"}, {"tap": "J", "hold": "⇧", "kind": "dual"}, {"tap": "K", "hold": "⌘", "kind": "dual"}, {"tap": "L", "hold": "⌥", "kind": "dual"}, {"tap": "⇧;", "hold": "⌃", "kind": "dual"}, {"tap": "'", "hold": "⌘⇧", "kind": "dual"}, {"tap": "rgb_ug_status_macro", "hold": "Magic", "kind": "layer"}, {"tap": "Z", "hold": "", "kind": "key"}, {"tap": "X", "hold": "", "kind": "key"}, {"tap": "C", "hold": "", "kind": "key"}, {"tap": "V", "hold": "", "kind": "key"}, {"tap": "B", "hold": "", "kind": "key"}, {"tap": "N", "hold": "", "kind": "key"}, {"tap": "M", "hold": "", "kind": "key"}, {"tap": ",", "hold": "", "kind": "key"}, {"tap": ".", "hold": "", "kind": "key"}, {"tap": "/", "hold": "", "kind": "key"}, {"tap": "\\", "hold": "Mouse", "kind": "layer"}, {"tap": "td_LAYER_Mouse", "hold": "", "kind": "key"}, {"tap": "⌘", "hold": "sticky", "kind": "dual"}, {"tap": "⇥", "hold": "", "kind": "key"}, {"tap": "mkp LCLK", "hold": "", "kind": "key"}, {"tap": "[", "hold": "", "kind": "key"}, {"tap": "]", "hold": "", "kind": "key"}, {"tap": "␣", "hold": "Cursor", "kind": "layer"}, {"tap": "↩", "hold": "Keypad", "kind": "layer"}, {"tap": "⌫", "hold": "", "kind": "key"}, {"tap": "-", "hold": "", "kind": "key"}, {"tap": "↩", "hold": "fn", "kind": "layer"}, {"tap": "␣", "hold": "Symbol", "kind": "layer"}], "Typing": [{"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "A", "hold": "", "kind": "key"}, {"tap": "S", "hold": "", "kind": "key"}, {"tap": "D", "hold": "", "kind": "key"}, {"tap": "F", "hold": "", "kind": "key"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "J", "hold": "", "kind": "key"}, {"tap": "K", "hold": "", "kind": "key"}, {"tap": "L", "hold": "", "kind": "key"}, {"tap": ";", "hold": "", "kind": "key"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "rgb_ug_status_macro", "hold": "Magic", "kind": "layer"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}], "Autoshift": [{"tap": "EQUAL", "hold": "", "kind": "key"}, {"tap": "N1", "hold": "", "kind": "key"}, {"tap": "N2", "hold": "", "kind": "key"}, {"tap": "N3", "hold": "", "kind": "key"}, {"tap": "N4", "hold": "", "kind": "key"}, {"tap": "N5", "hold": "", "kind": "key"}, {"tap": "N6", "hold": "", "kind": "key"}, {"tap": "N7", "hold": "", "kind": "key"}, {"tap": "N8", "hold": "", "kind": "key"}, {"tap": "N9", "hold": "", "kind": "key"}, {"tap": "N0", "hold": "", "kind": "key"}, {"tap": "MINUS", "hold": "", "kind": "key"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "Q", "hold": "", "kind": "key"}, {"tap": "W", "hold": "", "kind": "key"}, {"tap": "E", "hold": "", "kind": "key"}, {"tap": "R", "hold": "", "kind": "key"}, {"tap": "T", "hold": "", "kind": "key"}, {"tap": "Y", "hold": "", "kind": "key"}, {"tap": "U", "hold": "", "kind": "key"}, {"tap": "I", "hold": "", "kind": "key"}, {"tap": "O", "hold": "", "kind": "key"}, {"tap": "P", "hold": "", "kind": "key"}, {"tap": "BSLH", "hold": "", "kind": "key"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "A", "hold": "", "kind": "key"}, {"tap": "S", "hold": "", "kind": "key"}, {"tap": "D", "hold": "", "kind": "key"}, {"tap": "F", "hold": "", "kind": "key"}, {"tap": "G", "hold": "", "kind": "key"}, {"tap": "H", "hold": "", "kind": "key"}, {"tap": "J", "hold": "", "kind": "key"}, {"tap": "K", "hold": "", "kind": "key"}, {"tap": "L", "hold": "", "kind": "key"}, {"tap": "SEMI", "hold": "", "kind": "key"}, {"tap": "SQT", "hold": "", "kind": "key"}, {"tap": "rgb_ug_status_macro", "hold": "Magic", "kind": "layer"}, {"tap": "Z", "hold": "", "kind": "key"}, {"tap": "X", "hold": "", "kind": "key"}, {"tap": "C", "hold": "", "kind": "key"}, {"tap": "V", "hold": "", "kind": "key"}, {"tap": "B", "hold": "", "kind": "key"}, {"tap": "N", "hold": "", "kind": "key"}, {"tap": "M", "hold": "", "kind": "key"}, {"tap": "COMMA", "hold": "", "kind": "key"}, {"tap": "DOT", "hold": "", "kind": "key"}, {"tap": "FSLH", "hold": "", "kind": "key"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}], "Cursor": [{"tap": "PSCRN", "hold": "", "kind": "key"}, {"tap": "⎋", "hold": "", "kind": "key"}, {"tap": "INS", "hold": "", "kind": "key"}, {"tap": "⇧⇥", "hold": "", "kind": "key"}, {"tap": "⌫", "hold": "", "kind": "key"}, {"tap": "⌘F", "hold": "", "kind": "key"}, {"tap": "HOME", "hold": "", "kind": "key"}, {"tap": "PG DN", "hold": "", "kind": "key"}, {"tap": "PG UP", "hold": "", "kind": "key"}, {"tap": "END", "hold": "", "kind": "key"}, {"tap": "SLCK", "hold": "", "kind": "key"}, {"tap": "⌃⌥⇧⌘A", "hold": "", "kind": "key"}, {"tap": "⌘R", "hold": "", "kind": "key"}, {"tap": "PAUSE BREAK", "hold": "", "kind": "key"}, {"tap": "⌘A", "hold": "", "kind": "key"}, {"tap": "⌘Z", "hold": "", "kind": "key"}, {"tap": "⇧⌘Z", "hold": "", "kind": "key"}, {"tap": "⌘X", "hold": "", "kind": "key"}, {"tap": "⌦", "hold": "", "kind": "key"}, {"tap": "⌫", "hold": "", "kind": "key"}, {"tap": "⌥⌫", "hold": "", "kind": "key"}, {"tap": "⌥⌦", "hold": "", "kind": "key"}, {"tap": "⇥", "hold": "", "kind": "key"}, {"tap": "PSCRN", "hold": "", "kind": "key"}, {"tap": "⇧", "hold": "sticky", "kind": "dual"}, {"tap": "⌘W", "hold": "", "kind": "key"}, {"tap": "⌦", "hold": "", "kind": "key"}, {"tap": "⌥⌫", "hold": "", "kind": "key"}, {"tap": "⌥⌦", "hold": "", "kind": "key"}, {"tap": "⌘C", "hold": "", "kind": "key"}, {"tap": "←", "hold": "", "kind": "key"}, {"tap": "↓", "hold": "", "kind": "key"}, {"tap": "↑", "hold": "", "kind": "key"}, {"tap": "→", "hold": "", "kind": "key"}, {"tap": "APP", "hold": "", "kind": "key"}, {"tap": "⇧", "hold": "sticky", "kind": "dual"}, {"tap": "⌘L", "hold": "", "kind": "key"}, {"tap": "⌘", "hold": "sticky", "kind": "dual"}, {"tap": "⌘⌥F8", "hold": "", "kind": "key"}, {"tap": "⌘⌥F9", "hold": "", "kind": "key"}, {"tap": "⌘⌥F17", "hold": "", "kind": "key"}, {"tap": "⌘V", "hold": "", "kind": "key"}, {"tap": "⌥⇧←", "hold": "", "kind": "key"}, {"tap": "⌥←", "hold": "", "kind": "key"}, {"tap": "⌥→", "hold": "", "kind": "key"}, {"tap": "⌥⇧→", "hold": "", "kind": "key"}, {"tap": "⌘←", "hold": "", "kind": "key"}, {"tap": "⌘→", "hold": "", "kind": "key"}, {"tap": "⌘⌥F7", "hold": "", "kind": "key"}, {"tap": "⇧⌘G", "hold": "", "kind": "key"}, {"tap": "⌘G", "hold": "", "kind": "key"}, {"tap": "⌘F", "hold": "", "kind": "key"}, {"tap": "⇧⌘G", "hold": "", "kind": "key"}, {"tap": "⌘G", "hold": "", "kind": "key"}, {"tap": "", "hold": "", "kind": "held"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "⌘←", "hold": "", "kind": "key"}, {"tap": "⌘→", "hold": "", "kind": "key"}, {"tap": "cur_EXTEND_WORD_macos_v1_TKZ", "hold": "", "kind": "key"}], "Keypad": [{"tap": "", "hold": "", "kind": "blank"}, {"tap": "F1", "hold": "", "kind": "key"}, {"tap": "F2", "hold": "", "kind": "key"}, {"tap": "F3", "hold": "", "kind": "key"}, {"tap": "F4", "hold": "", "kind": "key"}, {"tap": "F5", "hold": "", "kind": "key"}, {"tap": "F6", "hold": "", "kind": "key"}, {"tap": "F7", "hold": "", "kind": "key"}, {"tap": "F8", "hold": "", "kind": "key"}, {"tap": "F9", "hold": "", "kind": "key"}, {"tap": "F10", "hold": "", "kind": "key"}, {"tap": "F11", "hold": "", "kind": "key"}, {"tap": "⇥", "hold": "", "kind": "key"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "KP MINUS", "hold": "", "kind": "key"}, {"tap": "KP 7", "hold": "", "kind": "key"}, {"tap": "KP 8", "hold": "", "kind": "key"}, {"tap": "KP 9", "hold": "", "kind": "key"}, {"tap": "KP SLASH", "hold": "", "kind": "key"}, {"tap": "F12", "hold": "", "kind": "key"}, {"tap": "⎋", "hold": "", "kind": "key"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "⌫", "hold": "", "kind": "key"}, {"tap": "KP 4", "hold": "", "kind": "key"}, {"tap": "KP 5", "hold": "", "kind": "key"}, {"tap": "KP 6", "hold": "", "kind": "key"}, {"tap": "KP MULTIPLY", "hold": "", "kind": "key"}, {"tap": "KP NUM", "hold": "", "kind": "key"}, {"tap": "rgb_ug_status_macro", "hold": "Magic", "kind": "layer"}, {"tap": "⌘Z", "hold": "", "kind": "key"}, {"tap": "⌘X", "hold": "", "kind": "key"}, {"tap": "⌘C", "hold": "", "kind": "key"}, {"tap": "⌘V", "hold": "", "kind": "key"}, {"tap": "⇧⌘V", "hold": "", "kind": "key"}, {"tap": "KP ENTER", "hold": "", "kind": "key"}, {"tap": "KP 1", "hold": "", "kind": "key"}, {"tap": "KP 2", "hold": "", "kind": "key"}, {"tap": "KP 3", "hold": "", "kind": "key"}, {"tap": "=", "hold": "", "kind": "key"}, {"tap": "HRM_macOS", "hold": "toggle", "kind": "dual"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "KP 0", "hold": "", "kind": "key"}, {"tap": "KP PLUS", "hold": "", "kind": "key"}, {"tap": "KP ENTER", "hold": "", "kind": "key"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "held"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "KP DOT", "hold": "", "kind": "key"}, {"tap": "KP 0", "hold": "", "kind": "key"}], "Symbol": [{"tap": "\\", "hold": "", "kind": "key"}, {"tap": "⇧7", "hold": "", "kind": "key"}, {"tap": "`", "hold": "", "kind": "key"}, {"tap": ",", "hold": "", "kind": "key"}, {"tap": ";", "hold": "", "kind": "key"}, {"tap": ".", "hold": "", "kind": "key"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "⌃⇥", "hold": "", "kind": "key"}, {"tap": "⌃⇧⇥", "hold": "", "kind": "key"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "⇧1", "hold": "", "kind": "key"}, {"tap": "[", "hold": "", "kind": "key"}, {"tap": "⇧[", "hold": "", "kind": "key"}, {"tap": "⇧]", "hold": "", "kind": "key"}, {"tap": "]", "hold": "", "kind": "key"}, {"tap": "⇧/", "hold": "", "kind": "key"}, {"tap": "`", "hold": "", "kind": "key"}, {"tap": "⌦", "hold": "", "kind": "key"}, {"tap": "⇧⇥", "hold": "", "kind": "key"}, {"tap": "INS", "hold": "", "kind": "key"}, {"tap": "⎋", "hold": "", "kind": "key"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "⇧3", "hold": "", "kind": "key"}, {"tap": "⇧6", "hold": "", "kind": "key"}, {"tap": "=", "hold": "", "kind": "key"}, {"tap": "⇧-", "hold": "", "kind": "key"}, {"tap": "⇧4", "hold": "", "kind": "key"}, {"tap": "⇧8", "hold": "", "kind": "key"}, {"tap": "⇧'", "hold": "", "kind": "key"}, {"tap": "⌫", "hold": "", "kind": "key"}, {"tap": "⇥", "hold": "", "kind": "key"}, {"tap": "␣", "hold": "", "kind": "key"}, {"tap": "↩", "hold": "", "kind": "key"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "⇧`", "hold": "", "kind": "key"}, {"tap": "⇧,", "hold": "", "kind": "key"}, {"tap": "⇧\\", "hold": "", "kind": "key"}, {"tap": "-", "hold": "", "kind": "key"}, {"tap": "⇧.", "hold": "", "kind": "key"}, {"tap": "/", "hold": "", "kind": "key"}, {"tap": "'", "hold": "", "kind": "key"}, {"tap": "⇧", "hold": "sticky", "kind": "dual"}, {"tap": "⌘", "hold": "sticky", "kind": "dual"}, {"tap": "⌥", "hold": "sticky", "kind": "dual"}, {"tap": "⌃", "hold": "sticky", "kind": "dual"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "'", "hold": "", "kind": "key"}, {"tap": "⇧'", "hold": "", "kind": "key"}, {"tap": "⇧=", "hold": "", "kind": "key"}, {"tap": "⇧9", "hold": "", "kind": "key"}, {"tap": "⇧0", "hold": "", "kind": "key"}, {"tap": "symb_dotdot_v1_TKZ", "hold": "", "kind": "key"}, {"tap": "⇧5", "hold": "", "kind": "key"}, {"tap": ";", "hold": "", "kind": "key"}, {"tap": "⇧2", "hold": "", "kind": "key"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "held"}], "Mouse": [{"tap": "msc SCRL_LEFT", "hold": "", "kind": "key"}, {"tap": "msc SCRL_RIGHT", "hold": "", "kind": "key"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "mkp MB4", "hold": "", "kind": "key"}, {"tap": "mkp MB5", "hold": "", "kind": "key"}, {"tap": "msc SCRL_RIGHT", "hold": "", "kind": "key"}, {"tap": "mkp LCLK", "hold": "", "kind": "key"}, {"tap": "mkp RCLK", "hold": "", "kind": "key"}, {"tap": "mmv MOVE_LEFT", "hold": "", "kind": "key"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "⇧", "hold": "sticky", "kind": "dual"}, {"tap": "⌃", "hold": "sticky", "kind": "dual"}, {"tap": "⌥", "hold": "sticky", "kind": "dual"}, {"tap": "⌘", "hold": "sticky", "kind": "dual"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "HRM_macOS", "hold": "toggle", "kind": "dual"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "⌘C", "hold": "", "kind": "key"}, {"tap": "mmv MOVE_UP", "hold": "", "kind": "key"}, {"tap": "MouseFast", "hold": "", "kind": "key"}, {"tap": "MouseWarp", "hold": "", "kind": "key"}, {"tap": "MouseSlow", "hold": "", "kind": "key"}, {"tap": "mkp LCLK", "hold": "", "kind": "key"}, {"tap": "msc SCRL_LEFT", "hold": "", "kind": "key"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "MouseSlow", "hold": "", "kind": "key"}, {"tap": "MouseWarp", "hold": "", "kind": "key"}, {"tap": "MouseFast", "hold": "", "kind": "key"}, {"tap": "⌘V", "hold": "", "kind": "key"}, {"tap": "mkp MB4", "hold": "", "kind": "key"}, {"tap": "mkp MB5", "hold": "", "kind": "key"}, {"tap": "msc MOVE_Y(35)", "hold": "", "kind": "key"}, {"tap": "msc MOVE_Y(-35)", "hold": "", "kind": "key"}, {"tap": "mkp RCLK", "hold": "", "kind": "key"}, {"tap": "Mouse", "hold": "", "kind": "held"}, {"tap": "Mouse", "hold": "toggle", "kind": "dual"}, {"tap": "msc MOVE_Y(40)", "hold": "", "kind": "key"}, {"tap": "msc MOVE_Y(-40)", "hold": "", "kind": "key"}, {"tap": "tripleClick", "hold": "", "kind": "key"}, {"tap": "mmv MOVE_DOWN", "hold": "", "kind": "key"}, {"tap": "mmv MOVE_RIGHT", "hold": "", "kind": "key"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "mkp LCLK", "hold": "", "kind": "key"}, {"tap": "mkp RCLK", "hold": "", "kind": "key"}, {"tap": "doubleClick", "hold": "", "kind": "key"}], "Magic": [{"tap": "mstr1_v1_TKZ", "hold": "", "kind": "key"}, {"tap": "BRI DN", "hold": "", "kind": "key"}, {"tap": "BRI UP", "hold": "", "kind": "key"}, {"tap": "PREV", "hold": "", "kind": "key"}, {"tap": "NEXT", "hold": "", "kind": "key"}, {"tap": "PP", "hold": "", "kind": "key"}, {"tap": "MUTE", "hold": "", "kind": "key"}, {"tap": "VOL DN", "hold": "", "kind": "key"}, {"tap": "VOL UP", "hold": "", "kind": "key"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "BT CLR", "hold": "", "kind": "key"}, {"tap": "BT CLR ALL", "hold": "", "kind": "key"}, {"tap": "bootloader", "hold": "", "kind": "key"}, {"tap": "RGB SPI", "hold": "", "kind": "key"}, {"tap": "RGB SAI", "hold": "", "kind": "key"}, {"tap": "RGB HUI", "hold": "", "kind": "key"}, {"tap": "RGB BRI", "hold": "", "kind": "key"}, {"tap": "RGB TOG", "hold": "", "kind": "key"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "bootloader", "hold": "", "kind": "key"}, {"tap": "sys_reset", "hold": "", "kind": "key"}, {"tap": "RGB SPD", "hold": "", "kind": "key"}, {"tap": "RGB SAD", "hold": "", "kind": "key"}, {"tap": "RGB HUD", "hold": "", "kind": "key"}, {"tap": "RGB BRD", "hold": "", "kind": "key"}, {"tap": "RGB EFF", "hold": "", "kind": "key"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "sys_reset", "hold": "", "kind": "key"}, {"tap": "", "hold": "", "kind": "held"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "bt_0", "hold": "", "kind": "key"}, {"tap": "bt_1", "hold": "", "kind": "key"}, {"tap": "bt_2", "hold": "", "kind": "key"}, {"tap": "bt_3", "hold": "", "kind": "key"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "OUT USB", "hold": "", "kind": "key"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "Typing", "hold": "toggle", "kind": "dual"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "HRM_macOS", "hold": "toggle", "kind": "dual"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "Autoshift", "hold": "toggle", "kind": "dual"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}], "fn": [{"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "⌃⌥⇧⌘E", "hold": "", "kind": "key"}, {"tap": "⌃⌥⇧⌘R", "hold": "", "kind": "key"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "⌥F19", "hold": "", "kind": "key"}, {"tap": "⌥F20", "hold": "", "kind": "key"}, {"tap": "⌥⌃F11", "hold": "", "kind": "key"}, {"tap": "⌥⌃F12", "hold": "", "kind": "key"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "←", "hold": "", "kind": "key"}, {"tap": "↓", "hold": "", "kind": "key"}, {"tap": "↑", "hold": "", "kind": "key"}, {"tap": "→", "hold": "", "kind": "key"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "⌥F15", "hold": "", "kind": "key"}, {"tap": "⌥F16", "hold": "", "kind": "key"}, {"tap": "⌥F17", "hold": "", "kind": "key"}, {"tap": "⌥F18", "hold": "", "kind": "key"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "▽", "hold": "", "kind": "trans"}, {"tap": "⌥F11", "hold": "", "kind": "key"}, {"tap": "⌥F12", "hold": "", "kind": "key"}, {"tap": "⌥F13", "hold": "", "kind": "key"}, {"tap": "⌥F14", "hold": "", "kind": "key"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "⌥⇧⌘⌃", "hold": "sticky", "kind": "dual"}, {"tap": "", "hold": "", "kind": "blank"}, {"tap": "", "hold": "", "kind": "held"}, {"tap": "", "hold": "", "kind": "blank"}]}, "order": ["HRM_macOS", "Typing", "Autoshift", "Cursor", "Keypad", "Symbol", "Mouse", "Magic", "fn"]};
+const UNIT = 64, KEY = 58;
+const W = 17.7 * UNIT, H = 6.7 * UNIT;
+const N = DATA.order.length;
+
+// Tab cycles how many layers are shown at once.
+const MODES = [
+  { count: 1, scale: 1.00, cols: 1 },
+  { count: 2, scale: 0.55, cols: 2 },  // side by side
+  { count: 4, scale: 0.50, cols: 2 },  // 2x2
+];
+let modeIdx = 0;
+let current = 0;
+
+const grid = document.getElementById("grid");
+const navbar = document.getElementById("navbar");
+const modecount = document.getElementById("modecount");
+
+DATA.order.forEach((name, i) => {
+  const n = document.createElement("div");
+  n.className = "nav";
+  n.innerHTML = `<span class="num">${i + 1}</span>${esc(name)}`;
+  n.onclick = () => { current = i; render(); };
+  navbar.appendChild(n);
+});
+
+function esc(s){ const d=document.createElement("div"); d.textContent=s; return d.innerHTML; }
+
+function buildBoard(layerIdx) {
+  const board = document.createElement("div");
+  board.className = "board";
+  DATA.layers[DATA.order[layerIdx]].forEach((k, idx) => {
+    const g = DATA.geo[idx];
+    const el = document.createElement("div");
+    el.className = "key " + k.kind;
+    el.style.left = (g.x * UNIT) + "px";
+    el.style.top  = (g.y * UNIT) + "px";
+    if (g.r) {
+      el.style.transformOrigin = ((g.rx - g.x) * UNIT) + "px " + ((g.ry - g.y) * UNIT) + "px";
+      el.style.transform = "rotate(" + g.r + "deg)";
+    }
+    let inner = "";
+    if (k.tap) inner += `<div class="tap">${esc(k.tap)}</div>`;
+    if (k.hold) inner += `<div class="hold">${esc(k.hold)}</div>`;
+    inner += `<span class="pos">${idx}</span>`;
+    el.innerHTML = inner;
+    board.appendChild(el);
+  });
+  return board;
+}
+
+function render() {
+  const m = MODES[modeIdx];
+  modecount.textContent = m.count;
+  grid.style.flexWrap = m.cols === 1 ? "nowrap" : "wrap";
+  grid.style.flexDirection = m.cols === 1 ? "column" : "row";
+  grid.style.maxWidth = m.cols === 1 ? "none" : (W * m.scale * m.cols + 40) + "px";
+
+  grid.innerHTML = "";
+  const visible = new Set();
+  for (let j = 0; j < m.count; j++) {
+    const li = (current + j) % N;
+    visible.add(li);
+
+    const slot = document.createElement("div");
+    slot.className = "slot";
+
+    const title = document.createElement("div");
+    title.className = "title";
+    title.innerHTML = `<span class="num">${li + 1}</span>${esc(DATA.order[li])}`;
+
+    const wrap = document.createElement("div");
+    wrap.className = "board-wrap";
+    wrap.style.width = (W * m.scale) + "px";
+    wrap.style.height = (H * m.scale) + "px";
+
+    const board = buildBoard(li);
+    board.style.transform = "scale(" + m.scale + ")";
+    wrap.appendChild(board);
+
+    slot.appendChild(title);
+    slot.appendChild(wrap);
+    grid.appendChild(slot);
+  }
+  [...navbar.children].forEach((t, j) => t.classList.toggle("active", visible.has(j)));
+}
+
+document.addEventListener("keydown", e => {
+  if (e.key === "Tab") {
+    e.preventDefault();
+    modeIdx = (modeIdx + 1) % MODES.length;
+    render();
+  } else if (e.key === "ArrowRight") {
+    current = (current + 1) % N; render();
+  } else if (e.key === "ArrowLeft") {
+    current = (current - 1 + N) % N; render();
+  } else if (e.key >= "1" && e.key <= "9") {
+    const idx = parseInt(e.key, 10) - 1;
+    if (idx < N) { current = idx; render(); }
+  }
+});
+
+render();
+</script>
+</body>
+</html>

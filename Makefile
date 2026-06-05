@@ -2,7 +2,7 @@ DOCKER_IMAGE  := go60-zmk-config-docker
 DOCKER_VOLUME := go60-zmk-nix-store
 KEYMAP_WORD_RE := &?[A-Za-z_][A-Za-z_0-9]*(\([^)]*\))?
 
-.PHONY: help build build-fast build-rebuild flash flash-slow draw ident ident-html layers diff diff-keymap setup-git clean nuke
+.PHONY: help build build-fast build-rebuild flash flash-slow draw layout-html ident ident-html layers diff diff-keymap setup-git clean nuke
 
 help:
 	@echo "Targets:"
@@ -12,6 +12,7 @@ help:
 	@echo "  flash          Build (skipping fetch), then copy go60.uf2 onto the bootloader drive."
 	@echo "  flash-slow     Same as flash but does the in-container 'git fetch origin' first."
 	@echo "  draw           Render keymap-drawer/keymap.svg from config/go60.keymap."
+	@echo "  layout-html    Generate wiki/layout.html (all layers, HTML viewer) from keymap.yaml."
 	@echo "  ident          Run the terminal key-position identifier."
 	@echo "  ident-html     Open the browser-based key-position identifier."
 	@echo "  layers         Open the layer popup viewer (builds binary if needed)."
@@ -39,6 +40,13 @@ flash-slow:
 	./flash.sh $(BRANCH)
 
 draw:
+	./draw.sh
+
+# Regenerate the all-layers HTML viewer. Needs keymap-drawer/keymap.yaml (run draw first).
+layout-html: keymap-drawer/keymap.yaml
+	python3 tools/gen-layout-html.py
+
+keymap-drawer/keymap.yaml:
 	./draw.sh
 
 ident:

@@ -969,14 +969,16 @@ behaviors {
 
         ZMK_TD_LAYER(td_LAYER_Mouse, 14)
 
-        // Swap shifted/unshifted on the apostrophe key:
-        //   tap         -> " (DQT)
-        //   shift + tap -> ' (SQT, with the shift consumed so it stays unshifted)
+        // Apostrophe / sticky Cmd+Shift key:
+        //   tap  -> ' (SQT; shift + tap -> ")
+        //   hold -> sticky LGUI+LSHFT (next key gets Cmd+Shift)
         qt_swap: qt_swap {
-            compatible = "zmk,behavior-mod-morph";
-            #binding-cells = <0>;
-            bindings = <&kp DQT>, <&kp SQT>;
-            mods = <(MOD_LSFT|MOD_RSFT)>;
+            compatible = "zmk,behavior-hold-tap";
+            #binding-cells = <2>;
+            tapping-term-ms = <190>;
+            quick-tap-ms = <300>;
+            flavor = "tap-preferred";
+            bindings = <&sk>, <&kp>;
         };
 
         // AutoShift Helper - &AS main macro is chained to &AS_HT hold tap and &AS_Shifted macro. For faster typists, it is recommended to decrease the tapping-term-ms value. A suggested value is 135 ms.
@@ -1587,7 +1589,7 @@ behaviors {
             bindings = <
             &kp EQUAL                           &kp N1                         &kp N2                          &kp N3                           &kp N4  &kp N5                                                                                                                                                       &kp N6                            &kp N7                           &kp N8                      &caps_word                                   &kp N0                      &kp LS(N2)
        &td_shift_caps                            &kp Q                          &kp W                           &kp E                            &kp R   &kp T                                                                                                                                                        &kp Y                             &kp U                            &kp I                           &kp O                                    &kp P                  &td_shift_caps
-        &tp LCTRL ESC  &HRM_left_pinky_v1B_TKZ LCTRL A  &HRM_left_ring_v1B_TKZ LALT S  &HRM_left_middy_v1B_TKZ LGUI D  &HRM_left_index_v1B_TKZ LSHFT F   &kp G                                                                                                                                                        &kp H  &HRM_right_index_v1B_TKZ RSHFT J  &HRM_right_middy_v1B_TKZ RGUI K  &HRM_right_ring_v1B_TKZ LALT L  &HRM_right_pinky_v1B_TKZ RCTRL LS(SEMI)                         &qt_swap
+        &tp LCTRL ESC  &HRM_left_pinky_v1B_TKZ LCTRL A  &HRM_left_ring_v1B_TKZ LALT S  &HRM_left_middy_v1B_TKZ LGUI D  &HRM_left_index_v1B_TKZ LSHFT F   &kp G                                                                                                                                                        &kp H  &HRM_right_index_v1B_TKZ RSHFT J  &HRM_right_middy_v1B_TKZ RGUI K  &HRM_right_ring_v1B_TKZ LALT L  &HRM_right_pinky_v1B_TKZ RCTRL LS(SEMI)                         &qt_swap LG(LSHFT) SQT
  &magic LAYER_Magic 0                            &kp Z                          &kp X                           &kp C                            &kp V   &kp B                                                                                                                                                        &kp N                             &kp M                        &kp COMMA                         &kp DOT                                 &kp FSLH  &thumb_v2_TKZ LAYER_Mouse BSLH
                                                                       &td_LAYER_Mouse                        &sk LGUI                          &kp TAB                                                                                                                                                                                              &mkp LCLK                         &kp LBKT                        &kp RBKT
                                                                                                                                                                 &thumb_v2_TKZ LAYER_Cursor SPACE  &thumb_v2_TKZ LAYER_Keypad RET  &kp BSPC  &kp MINUS  &thumb_v2_TKZ LAYER_fn RET  &space_v3_TKZ LAYER_Symbol SPACE
