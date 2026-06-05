@@ -127,6 +127,7 @@ def main():
             "x": g["x"], "y": g["y"],
             "r": g.get("r", 0),
             "rx": g.get("rx", g["x"]), "ry": g.get("ry", g["y"]),
+            "label": g["label"],
         }
         for g in geo
     ]
@@ -204,18 +205,25 @@ TEMPLATE = r"""<!DOCTYPE html>
     gap:4px; justify-content:center;
   }
   .nav {
-    display:flex; align-items:center; gap:5px; cursor:pointer; white-space:nowrap;
+    display:flex; align-items:center; gap:5px; cursor:grab; white-space:nowrap;
     background:var(--panel); border:1px solid var(--edge); border-radius:7px;
-    padding:3px 8px 3px 4px; font-size:11px; color:var(--muted); transition:.12s;
+    padding:3px 8px 3px 5px; font-size:11px; color:var(--muted); transition:border-color .12s,color .12s,opacity .12s;
+    user-select:none;
   }
   .nav:hover { color:var(--text); border-color:#3a4456; }
+  .nav:active { cursor:grabbing; }
   .nav.active { background:#26354a; border-color:var(--c-layer); color:#dff0ff; }
+  .nav.dragging { opacity:.35; }
+  .nav.over { border-color:var(--c-layer); box-shadow:0 0 0 2px var(--c-layer) inset; }
+  .nav .grip { color:#5a647a; font-size:10px; letter-spacing:-1px; }
   .nav .num {
     display:inline-flex; align-items:center; justify-content:center;
     width:15px; height:15px; border-radius:4px; font-size:10px; font-weight:700;
     background:#00000040; color:var(--c-layer);
   }
   .nav.active .num { background:var(--c-layer); color:#0f1115; }
+  .reset { color:var(--c-layer); cursor:pointer; text-decoration:none; }
+  .reset:hover { text-decoration:underline; }
 
   footer {
     margin-top:22px; max-width:780px; display:flex; flex-direction:column;
@@ -248,7 +256,8 @@ TEMPLATE = r"""<!DOCTYPE html>
   <div class="row">
     <kbd>Tab</kbd> show <b id="modecount">1</b> / 2 / 4 layers
     <kbd>←</kbd> <kbd>→</kbd> move
-    <kbd>1</kbd>–<kbd>9</kbd> jump to layer
+    <kbd>1</kbd>–<kbd>9</kbd> jump
+    · drag chips to reorder · <a class="reset" id="reset">reset order</a>
   </div>
   <div class="gen">Generated from <code>keymap-drawer/keymap.yaml</code> + <code>config/info.json</code> by <code>tools/gen-layout-html.py</code></div>
 </footer>
@@ -257,7 +266,7 @@ TEMPLATE = r"""<!DOCTYPE html>
 const DATA = /*DATA*/;
 const UNIT = 64, KEY = 58;
 const W = 17.7 * UNIT, H = 6.7 * UNIT;
-const N = DATA.order.length;
+const LS_KEY = "go60LayoutUI";
 
 // Tab cycles how many layers are shown at once.
 const MODES = [
@@ -265,27 +274,38 @@ const MODES = [
   { count: 2, scale: 0.55, cols: 2 },  // side by side
   { count: 4, scale: 0.50, cols: 2 },  // 2x2
 ];
-let modeIdx = 0;
-let current = 0;
+
+// --- persisted UI state (layer order, view mode, current layer) ---
+function loadState() {
+  try { return JSON.parse(localStorage.getItem(LS_KEY)) || {}; } catch (e) { return {}; }
+}
+function saveState() {
+  try { localStorage.setItem(LS_KEY, JSON.stringify({ order, modeIdx, current })); } catch (e) {}
+}
+// Keep a stored order valid even if layers were added/removed since it was saved.
+function reconcileOrder(stored) {
+  const all = DATA.order;
+  if (!Array.isArray(stored)) return [...all];
+  const out = stored.filter(n => all.includes(n));
+  for (const n of all) if (!out.includes(n)) out.push(n);
+  return out.length ? out : [...all];
+}
+
+const saved = loadState();
+let order = reconcileOrder(saved.order);
+let modeIdx = (saved.modeIdx >= 0 && saved.modeIdx < MODES.length) ? saved.modeIdx : 0;
+let current = (saved.current >= 0 && saved.current < order.length) ? saved.current : 0;
 
 const grid = document.getElementById("grid");
 const navbar = document.getElementById("navbar");
 const modecount = document.getElementById("modecount");
 
-DATA.order.forEach((name, i) => {
-  const n = document.createElement("div");
-  n.className = "nav";
-  n.innerHTML = `<span class="num">${i + 1}</span>${esc(name)}`;
-  n.onclick = () => { current = i; render(); };
-  navbar.appendChild(n);
-});
-
 function esc(s){ const d=document.createElement("div"); d.textContent=s; return d.innerHTML; }
 
-function buildBoard(layerIdx) {
+function buildBoard(name) {
   const board = document.createElement("div");
   board.className = "board";
-  DATA.layers[DATA.order[layerIdx]].forEach((k, idx) => {
+  DATA.layers[name].forEach((k, idx) => {
     const g = DATA.geo[idx];
     const el = document.createElement("div");
     el.className = "key " + k.kind;
@@ -298,15 +318,52 @@ function buildBoard(layerIdx) {
     let inner = "";
     if (k.tap) inner += `<div class="tap">${esc(k.tap)}</div>`;
     if (k.hold) inner += `<div class="hold">${esc(k.hold)}</div>`;
-    inner += `<span class="pos">${idx}</span>`;
+    inner += `<span class="pos">${esc(g.label)}</span>`;
     el.innerHTML = inner;
     board.appendChild(el);
   });
   return board;
 }
 
+// --- bottom layer list (draggable to reorder) ---
+let dragName = null;
+
+function buildNav() {
+  navbar.innerHTML = "";
+  order.forEach((name, i) => {
+    const n = document.createElement("div");
+    n.className = "nav";
+    n.draggable = true;
+    n.dataset.name = name;
+    n.innerHTML = `<span class="grip">⠿</span><span class="num">${i + 1}</span>${esc(name)}`;
+    n.addEventListener("click", () => { current = i; render(); saveState(); });
+    n.addEventListener("dragstart", e => {
+      dragName = name; n.classList.add("dragging");
+      e.dataTransfer.effectAllowed = "move";
+    });
+    n.addEventListener("dragend", () => n.classList.remove("dragging"));
+    n.addEventListener("dragover", e => { e.preventDefault(); n.classList.add("over"); });
+    n.addEventListener("dragleave", () => n.classList.remove("over"));
+    n.addEventListener("drop", e => {
+      e.preventDefault();
+      n.classList.remove("over");
+      if (!dragName || dragName === name) return;
+      const activeName = order[current];          // keep the same layer focused
+      const from = order.indexOf(dragName);
+      order.splice(from, 1);
+      order.splice(order.indexOf(name), 0, dragName);
+      current = order.indexOf(activeName);
+      saveState();
+      buildNav();
+      render();
+    });
+    navbar.appendChild(n);
+  });
+}
+
 function render() {
   const m = MODES[modeIdx];
+  const N = order.length;
   modecount.textContent = m.count;
   grid.style.flexWrap = m.cols === 1 ? "nowrap" : "wrap";
   grid.style.flexDirection = m.cols === 1 ? "column" : "row";
@@ -315,22 +372,23 @@ function render() {
   grid.innerHTML = "";
   const visible = new Set();
   for (let j = 0; j < m.count; j++) {
-    const li = (current + j) % N;
-    visible.add(li);
+    const slotIdx = (current + j) % N;
+    const name = order[slotIdx];
+    visible.add(slotIdx);
 
     const slot = document.createElement("div");
     slot.className = "slot";
 
     const title = document.createElement("div");
     title.className = "title";
-    title.innerHTML = `<span class="num">${li + 1}</span>${esc(DATA.order[li])}`;
+    title.innerHTML = `<span class="num">${slotIdx + 1}</span>${esc(name)}`;
 
     const wrap = document.createElement("div");
     wrap.className = "board-wrap";
     wrap.style.width = (W * m.scale) + "px";
     wrap.style.height = (H * m.scale) + "px";
 
-    const board = buildBoard(li);
+    const board = buildBoard(name);
     board.style.transform = "scale(" + m.scale + ")";
     wrap.appendChild(board);
 
@@ -342,20 +400,27 @@ function render() {
 }
 
 document.addEventListener("keydown", e => {
+  const N = order.length;
   if (e.key === "Tab") {
     e.preventDefault();
     modeIdx = (modeIdx + 1) % MODES.length;
-    render();
+    render(); saveState();
   } else if (e.key === "ArrowRight") {
-    current = (current + 1) % N; render();
+    current = (current + 1) % N; render(); saveState();
   } else if (e.key === "ArrowLeft") {
-    current = (current - 1 + N) % N; render();
+    current = (current - 1 + N) % N; render(); saveState();
   } else if (e.key >= "1" && e.key <= "9") {
     const idx = parseInt(e.key, 10) - 1;
-    if (idx < N) { current = idx; render(); }
+    if (idx < N) { current = idx; render(); saveState(); }
   }
 });
 
+document.getElementById("reset").addEventListener("click", () => {
+  order = [...DATA.order]; current = 0;
+  saveState(); buildNav(); render();
+});
+
+buildNav();
 render();
 </script>
 </body>
